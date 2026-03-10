@@ -38,7 +38,7 @@ async def startup_event():
     
     # Initialize Beanie with the User blueprint
     await init_beanie(
-        database=client.unibees_db, 
+        database=client.Unibees, 
         document_models=[User]
     )
     print("🚀 Hive Database Connected (Auth Only Mode)")
