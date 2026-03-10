@@ -7,8 +7,8 @@ from dotenv import load_dotenv
 from strawberry.fastapi import GraphQLRouter
 
 # Import our models and the unified schema
-from app.models.user import User
-from app.graphql.schema import schema
+from src.models.user import User
+from src.graphql.schema import schema
 
 # Load .env from the root directory
 load_dotenv()
