@@ -5,6 +5,8 @@ from datetime import datetime, timedelta
 from typing import List, Optional
 from src.models.user import User
 from src.graphql.types import UserType, AuthPayload
+from src.models.swarm import Swarm
+from src.graphql.types import UserType, AuthPayload, SwarmType
 
 def create_token(user_id: str):
     payload = {
@@ -83,3 +85,61 @@ class Mutation:
         user.major = major
         await user.save()
         return user
+    
+    @strawberry.mutation
+    async def update_image(self, info: strawberry.Info, image: str) -> UserType:
+        """Saves the Base64 image string to the user's document in MongoDB."""
+        user_id = info.context.get("user_id")
+        if not user_id:
+            raise Exception("Unauthorized.")
+        
+        user = await User.get(user_id)
+        if not user:
+            raise Exception("User not found.")
+
+        user.image = image
+        await user.save()
+        return user
+    
+
+ # --- SWARM OPERATIONS ---
+
+    @strawberry.mutation
+    async def create_swarm(
+        self, 
+        info: strawberry.Info, 
+        name: str, 
+        description: str, 
+        pollen_type: str
+    ) -> SwarmType:
+        """Establishes a new Swarm (Group) in the hive."""
+        user_id = info.context.get("user_id")
+        if not user_id:
+            raise Exception("Login required to create a swarm.")
+        
+        new_swarm = Swarm(
+            name=name,
+            description=description,
+            pollen_type=pollen_type,
+            creator_id=user_id,
+            members=[user_id]
+        )
+        await new_swarm.insert()
+        return new_swarm
+
+    @strawberry.mutation
+    async def join_swarm(self, info: strawberry.Info, swarm_id: str) -> SwarmType:
+        """Adds the logged-in bee to an existing swarm."""
+        user_id = info.context.get("user_id")
+        if not user_id:
+            raise Exception("Unauthorized.")
+
+        swarm = await Swarm.get(swarm_id)
+        if not swarm:
+            raise Exception("Swarm not found.")
+
+        if user_id not in swarm.members:
+            swarm.members.append(user_id)
+            await swarm.save()
+            
+        return swarm
