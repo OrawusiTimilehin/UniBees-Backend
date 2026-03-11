@@ -64,3 +64,22 @@ class Mutation:
         await user.save()
         
         return "Password successfully updated."
+    
+@strawberry.type
+class Mutation:
+    # ... existing mutations (signup, login, update_interests, change_password) ...
+
+    @strawberry.mutation
+    async def update_major(self, info: strawberry.Info, major: str) -> UserType:
+        """Updates the bee's field of study in the hive."""
+        user_id = info.context.get("user_id")
+        if not user_id:
+            raise Exception("Unauthorized.")
+        
+        user = await User.get(user_id)
+        if not user:
+            raise Exception("User not found.")
+
+        user.major = major
+        await user.save()
+        return user
