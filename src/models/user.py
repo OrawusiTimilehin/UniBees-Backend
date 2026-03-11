@@ -26,7 +26,7 @@ class User(Document):
 
     class Settings:
         # Collection name set to 'unibees'
-        name = "unibees" 
+        name = "users" 
 
     async def set_password(self, plain_password: str):
         """

@@ -32,31 +32,32 @@ class Mutation:
         """
         Registers a new Bee in the hive.
         1. Checks for existing email.
-        2. Hashes password securely.
-        3. Saves to MongoDB Atlas.
+        2. Hashes password securely via the User model.
+        3. Saves to MongoDB Atlas using Beanie's insert().
         """
         # Ensure email is lowercase for consistency
         email_clean = email.lower()
         
+        # 1. Search Atlas for an existing bee
         existing = await User.find_one(User.email == email_clean)
         if existing:
             raise Exception("This email is already registered in the hive!")
 
-        # Create the Beanie document
+        # 2. Create the Beanie document instance
         new_user = User(
             username=username,
             email=email_clean,
-            password="", # Placeholder, set below
+            password="", # Placeholder, will be hashed below
             name=name
         )
         
-        # Hash the password using our model helper
+        # 3. Hash the password using the helper defined in the Canvas
         await new_user.set_password(password)
         
-        # Insert into Atlas
+        # 4. STORE IN MONGODB: This is the line that performs the save
         await new_user.insert()
 
-        # Generate session token
+        # 5. Generate session token
         token = create_token(str(new_user.id))
         
         return AuthPayload(
