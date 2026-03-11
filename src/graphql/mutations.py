@@ -99,3 +99,34 @@ class Mutation:
                 image=user.image
             )
         )
+
+        # --- PROFILE UPDATES (NEW) ---
+
+    @strawberry.mutation
+    async def update_interests(self, info: strawberry.Info, interests: List[str]) -> UserType:
+        """Updates the user's pollen (interests) list."""
+        user_id = info.context.get("user_id")
+        if not user_id:
+            raise Exception("You must be logged in to update your interests.")
+        
+        user = await User.get(user_id)
+        if not user:
+            raise Exception("User not found.")
+            
+        user.interests = interests
+        await user.save() # Saves changes to MongoDB Atlas
+        return user
+
+    @strawberry.mutation
+    async def change_password(self, info: strawberry.Info, new_password: str) -> str:
+        """Securely updates the bee's password."""
+        user_id = info.context.get("user_id")
+        if not user_id:
+            raise Exception("Unauthorized action.")
+        
+        user = await User.get(user_id)
+        # Hashing happens inside the set_password model helper
+        await user.set_password(new_password)
+        await user.save()
+        
+        return "Password successfully updated."
