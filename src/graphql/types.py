@@ -17,10 +17,11 @@ class SwarmType:
     id: str
     name: str
     description: str
-    pollen_type: str
+    tags: List[str] 
     creator_id: str
     members: List[str]
-    nectar_quality: float
+    # Making this optional to prevent frontend crashes if a record is missing the field
+    nectar_quality: Optional[float] 
     image: str
 
 @strawberry.type

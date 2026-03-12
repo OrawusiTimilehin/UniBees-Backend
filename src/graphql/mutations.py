@@ -109,8 +109,9 @@ class Mutation:
         self, 
         info: strawberry.Info, 
         name: str, 
-        description: str, 
-        pollen_type: str
+        description: str,
+        tags: List[str],
+        nectar_quality: float = 0.0,
     ) -> SwarmType:
         """Establishes a new Swarm (Group) in the hive."""
         user_id = info.context.get("user_id")
@@ -120,7 +121,6 @@ class Mutation:
         new_swarm = Swarm(
             name=name,
             description=description,
-            pollen_type=pollen_type,
             creator_id=user_id,
             members=[user_id]
         )
@@ -143,3 +143,33 @@ class Mutation:
             await swarm.save()
             
         return swarm
+    
+
+# --- In mutations.py ---
+@strawberry.mutation
+async def update_swarm(
+    self, 
+    info: strawberry.Info, 
+    swarm_id: str, 
+    description: Optional[str] = None, 
+    tags: Optional[List[str]] = None,
+    image: Optional[str] = None
+) -> SwarmType:
+    """Allows the creator to update swarm details."""
+    user_id = info.context.get("user_id")
+    swarm = await Swarm.get(swarm_id)
+    
+    if not swarm:
+        raise Exception("Swarm not found")
+    if swarm.creator_id != user_id:
+        raise Exception("Only the queen of this swarm can edit its details!")
+
+    if description is not None:
+        swarm.description = description
+    if tags is not None:
+        swarm.tags = tags
+    if image is not None:
+        swarm.image = image
+        
+    await swarm.save()
+    return swarm

@@ -1,7 +1,10 @@
 import strawberry
-from typing import Optional
+from typing import Optional, List
 from src.models.user import User
-from src.graphql.types import UserType
+from src.graphql.types import UserType, SwarmType
+from src.models.swarm import Swarm
+
+
 
 @strawberry.type
 class Query:
@@ -42,3 +45,46 @@ class Query:
             return None
             
         return user
+    
+
+
+
+@strawberry.type
+class Query:
+    @strawberry.field
+    async def me(self, info: strawberry.Info) -> Optional[UserType]:
+        """Retrieves the currently logged-in bee."""
+        user_id = info.context.get("user_id")
+        if not user_id:
+            return None
+        return await User.get(user_id)
+
+    @strawberry.field
+    async def swarms(self) -> List[SwarmType]:
+        """
+        THE MISSING QUERY:
+        Fetches all active swarms from the hive, sorted by nectar quality.
+        """
+        # Fetch all swarms from MongoDB
+        all_swarms = await Swarm.find_all().to_list()
+        
+        # Sort by nectar quality descending (Highest first) in memory
+        return sorted(all_swarms, key=lambda s: s.nectar_quality, reverse=True)
+
+    @strawberry.field
+    async def get_user(self, id: str) -> Optional[UserType]:
+        """Fetches a specific bee by their ID."""
+        return await User.get(id)
+    
+
+
+    # --- In queries.py ---
+    @strawberry.field
+    async def my_swarms(self, info: strawberry.Info) -> List[SwarmType]:
+        """Fetches all swarms created by the currently logged-in bee."""
+        user_id = info.context.get("user_id")
+        if not user_id:
+            raise Exception("Not authenticated")
+        
+        swarms = await Swarm.find(Swarm.creator_id == user_id).to_list()
+        return swarms
