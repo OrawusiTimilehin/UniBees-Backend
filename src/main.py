@@ -12,6 +12,9 @@ from strawberry.fastapi import GraphQLRouter
 from src.models.user import User
 from src.models.swarm import Swarm
 from src.models.message import Message
+# Note: Ensure you create a Notification model in your models folder
+# from src.models.notification import Notification 
+
 from src.graphql.schema import schema
 from src.middleware.auth import get_user_id_from_request
 
@@ -27,10 +30,10 @@ origins = [
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins, # Specifically allow your frontend
+    allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],    # Allow GET, POST, OPTIONS, etc.
-    allow_headers=["*"],    # Allow Authorization, Content-Type, etc.
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # --- GraphQL Setup ---
@@ -48,13 +51,14 @@ socket_app = socketio.ASGIApp(sio, app)
 @app.on_event("startup")
 async def startup_event():
     client = AsyncIOMotorClient(os.getenv("MONGODB_URI"))
+    # Ensure all social models are initialized here
     await init_beanie(
         database=client.unibees_db, 
         document_models=[User, Swarm, Message]
     )
-    print("🚀 Hive DB Connected & CORS Policy Active")
+    print("🚀 Hive DB Connected & Social Features Active")
 
-# --- THE FIX: Socket.io Event Handlers for Database Persistence ---
+# --- Socket.io Event Handlers ---
 
 @sio.event
 async def connect(sid, environ):
@@ -62,22 +66,27 @@ async def connect(sid, environ):
 
 @sio.event
 async def join_swarm(sid, data):
-    """Adds a bee to a specific swarm room for targeted broadcasting."""
+    """Adds a bee to a specific swarm room for group chat."""
     swarm_id = data.get("swarm_id")
     if swarm_id:
         await sio.enter_room(sid, swarm_id)
         print(f"Bee {sid} joined swarm {swarm_id}")
 
 @sio.event
+async def identify_bee(sid, data):
+    """
+    Users join a private room named after their user_id.
+    This allows the server to send them direct notifications (friend requests).
+    """
+    user_id = data.get("user_id")
+    if user_id:
+        await sio.enter_room(sid, user_id)
+        print(f"Bee {user_id} is now reachable for private notifications")
+
+@sio.event
 async def send_message(sid, data):
-    """
-    Receives a message from the frontend, persists it to MongoDB,
-    and broadcasts it back to everyone in the swarm.
-    """
+    """Group messaging persistence and broadcast."""
     swarm_id = data.get("swarm_id")
-    
-    # 1. Map incoming data to our Beanie Message model
-    # Note: Using data.get to safely handle both snake_case and camelCase from frontend
     new_msg = Message(
         swarm_id=swarm_id,
         sender_id=data.get("sender_id") or data.get("senderId"),
@@ -86,17 +95,30 @@ async def send_message(sid, data):
         text=data.get("text"),
         timestamp=datetime.utcnow()
     )
-
-    # 2. Persist to MongoDB Atlas
     await new_msg.insert()
-
-    # 3. Broadcast to everyone in the swarm room (Real-time)
-    # We include the new DB generated ID in the broadcast
     broadcast_data = new_msg.to_dict() if hasattr(new_msg, 'to_dict') else data
     await sio.emit("receive_message", broadcast_data, room=swarm_id)
-    print(f"Buzz saved and broadcasted in swarm {swarm_id}")
+
+@sio.event
+async def send_friend_request(sid, data):
+    """
+    Handles real-time friend request alerts.
+    'to_user_id' is the ID of the person whose name was clicked.
+    """
+    target_user_id = data.get("to_user_id")
+    sender_name = data.get("from_name")
+    
+    notification = {
+        "type": "FRIEND_REQUEST",
+        "message": f"{sender_name} wants to join your swarm!",
+        "from_user_id": data.get("from_user_id"),
+        "timestamp": datetime.utcnow().isoformat()
+    }
+    
+    # Send only to the specific user's room
+    await sio.emit("new_notification", notification, room=target_user_id)
+    print(f"Notification sent to {target_user_id} from {sender_name}")
 
 @sio.event
 async def disconnect(sid):
     print(f"Bee left the hive: {sid}")
-    
