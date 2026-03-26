@@ -1,3 +1,5 @@
+import datetime
+
 import strawberry
 from typing import List, Optional
 
@@ -23,6 +25,17 @@ class SwarmType:
     # Making this optional to prevent frontend crashes if a record is missing the field
     nectar_quality: Optional[float] 
     image: str
+
+
+@strawberry.type
+class MessageType:
+    id: str
+    swarm_id: str
+    sender_id: str
+    sender_name: str
+    sender_image: str
+    text: str
+    timestamp: datetime
 
 @strawberry.type
 class AuthPayload:

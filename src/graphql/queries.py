@@ -1,7 +1,7 @@
 import strawberry
 from typing import Optional, List
 from src.models.user import User
-from src.graphql.types import UserType, SwarmType
+from src.graphql.types import UserType, SwarmType, MessageType
 from src.models.swarm import Swarm
 
 
@@ -88,3 +88,14 @@ class Query:
         
         swarms = await Swarm.find(Swarm.creator_id == user_id).to_list()
         return swarms
+
+
+
+    @strawberry.field
+    async def get_swarm_messages(self, swarm_id: str) -> List[MessageType]:
+        """Fetches the last 50 messages for a specific swarm chat."""
+        messages = await Message.find(
+            Message.swarm_id == swarm_id
+        ).sort("-timestamp").limit(50).to_list()
+        # Return in chronological order (oldest first for chat UI)
+        return messages[::-1]
