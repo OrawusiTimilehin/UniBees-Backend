@@ -141,7 +141,7 @@ class Mutation:
         return swarm
     
 
-    # --- In mutations.py ---
+
     @strawberry.mutation
     async def update_swarm(
         self, 
@@ -168,4 +168,30 @@ class Mutation:
             swarm.image = image
             
         await swarm.save()
+        return swarm
+    
+
+    @strawberry.mutation
+    async def join_swarm(self, info: strawberry.Info, swarm_id: str) -> SwarmType:
+        """Adds the bee to the swarm and updates the user's joined list."""
+        user_id = info.context.get("user_id")
+        if not user_id:
+            raise Exception("Unauthorized. Please log in.")
+
+        swarm = await Swarm.get(swarm_id)
+        user = await User.get(user_id)
+        
+        if not swarm or not user:
+            raise Exception("Swarm or User not found.")
+
+        # 1. Update Swarm Members
+        if user_id not in swarm.members:
+            swarm.members.append(user_id)
+            await swarm.save()
+            
+        # 2. Update User's Joined Swarms
+        if swarm_id not in user.swarms_joined:
+            user.swarms_joined.append(swarm_id)
+            await user.save()
+            
         return swarm
