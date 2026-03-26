@@ -66,10 +66,6 @@ class Mutation:
         await user.save()
         
         return "Password successfully updated."
-    
-@strawberry.type
-class Mutation:
-    # ... existing mutations (signup, login, update_interests, change_password) ...
 
     @strawberry.mutation
     async def update_major(self, info: strawberry.Info, major: str) -> UserType:
@@ -145,31 +141,31 @@ class Mutation:
         return swarm
     
 
-# --- In mutations.py ---
-@strawberry.mutation
-async def update_swarm(
-    self, 
-    info: strawberry.Info, 
-    swarm_id: str, 
-    description: Optional[str] = None, 
-    tags: Optional[List[str]] = None,
-    image: Optional[str] = None
-) -> SwarmType:
-    """Allows the creator to update swarm details."""
-    user_id = info.context.get("user_id")
-    swarm = await Swarm.get(swarm_id)
-    
-    if not swarm:
-        raise Exception("Swarm not found")
-    if swarm.creator_id != user_id:
-        raise Exception("Only the queen of this swarm can edit its details!")
-
-    if description is not None:
-        swarm.description = description
-    if tags is not None:
-        swarm.tags = tags
-    if image is not None:
-        swarm.image = image
+    # --- In mutations.py ---
+    @strawberry.mutation
+    async def update_swarm(
+        self, 
+        info: strawberry.Info, 
+        swarm_id: str, 
+        description: Optional[str] = None, 
+        tags: Optional[List[str]] = None,
+        image: Optional[str] = None
+    ) -> SwarmType:
+        """Allows the creator to update swarm details."""
+        user_id = info.context.get("user_id")
+        swarm = await Swarm.get(swarm_id)
         
-    await swarm.save()
-    return swarm
+        if not swarm:
+            raise Exception("Swarm not found")
+        if swarm.creator_id != user_id:
+            raise Exception("Only the queen of this swarm can edit its details!")
+
+        if description is not None:
+            swarm.description = description
+        if tags is not None:
+            swarm.tags = tags
+        if image is not None:
+            swarm.image = image
+            
+        await swarm.save()
+        return swarm
