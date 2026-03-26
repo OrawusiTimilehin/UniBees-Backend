@@ -1,5 +1,5 @@
+import datetime
 from beanie import Document, Indexed
-from datetime import datetime
 from typing import Optional
 from pydantic import Field
 
@@ -19,7 +19,9 @@ class Message(Document):
     sender_name: str
     
     text: str
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    
+    # Using explicit naming to avoid the AttributeError and Strawberry conflicts
+    timestamp: datetime.datetime = Field(default_factory=datetime.datetime.utcnow)
 
     class Settings:
         name = "messages"

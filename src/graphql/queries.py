@@ -3,6 +3,7 @@ from typing import Optional, List
 from src.models.user import User
 from src.graphql.types import UserType, SwarmType, MessageType
 from src.models.swarm import Swarm
+from src.models.message import Message
 
 
 
@@ -46,19 +47,36 @@ class Query:
             
         return user
     
-
-
-
-@strawberry.type
-class Query:
+      # --- In queries.py ---
     @strawberry.field
-    async def me(self, info: strawberry.Info) -> Optional[UserType]:
-        """Retrieves the currently logged-in bee."""
+    async def my_swarms(self, info: strawberry.Info) -> List[SwarmType]:
+        """Fetches all swarms created by the currently logged-in bee."""
         user_id = info.context.get("user_id")
         if not user_id:
-            return None
-        return await User.get(user_id)
+            raise Exception("Not authenticated")
+        
+        swarms = await Swarm.find(Swarm.creator_id == user_id).to_list()
+        return swarms
 
+    
+    @strawberry.field
+    async def get_swarm(self, id: str) -> Optional[SwarmType]:
+        """Fetches a swarm, ensuring the ID is valid for MongoDB."""
+        try:
+            # Try fetching by direct ID string (Beanie handles conversion)
+            swarm = await Swarm.get(id)
+            return swarm
+        except Exception:
+            return None
+
+    @strawberry.field
+    async def get_swarm_messages(self, swarm_id: str) -> List[MessageType]:
+        """Chronological messages for the chat UI."""
+        messages = await Message.find(
+            Message.swarm_id == swarm_id
+        ).sort("-timestamp").limit(50).to_list()
+        return messages[::-1]
+    
     @strawberry.field
     async def swarms(self) -> List[SwarmType]:
         """
@@ -71,31 +89,5 @@ class Query:
         # Sort by nectar quality descending (Highest first) in memory
         return sorted(all_swarms, key=lambda s: s.nectar_quality, reverse=True)
 
-    @strawberry.field
-    async def get_user(self, id: str) -> Optional[UserType]:
-        """Fetches a specific bee by their ID."""
-        return await User.get(id)
-    
 
-
-    # --- In queries.py ---
-    @strawberry.field
-    async def my_swarms(self, info: strawberry.Info) -> List[SwarmType]:
-        """Fetches all swarms created by the currently logged-in bee."""
-        user_id = info.context.get("user_id")
-        if not user_id:
-            raise Exception("Not authenticated")
-        
-        swarms = await Swarm.find(Swarm.creator_id == user_id).to_list()
-        return swarms
-
-
-
-    @strawberry.field
-    async def get_swarm_messages(self, swarm_id: str) -> List[MessageType]:
-        """Fetches the last 50 messages for a specific swarm chat."""
-        messages = await Message.find(
-            Message.swarm_id == swarm_id
-        ).sort("-timestamp").limit(50).to_list()
-        # Return in chronological order (oldest first for chat UI)
-        return messages[::-1]
+  

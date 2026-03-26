@@ -1,5 +1,4 @@
 import datetime
-
 import strawberry
 from typing import List, Optional
 
@@ -35,7 +34,7 @@ class MessageType:
     sender_name: str
     sender_image: str
     text: str
-    timestamp: datetime
+    timestamp: datetime.datetime
 
 @strawberry.type
 class AuthPayload:
