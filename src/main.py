@@ -1,15 +1,12 @@
 import os
-import socketio
-import certifi
+from datetime import datetime
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from beanie import init_beanie
-from datetime import datetime
 from dotenv import load_dotenv
-
-# Load environment variables
-load_dotenv(".env")
+import socketio
+from strawberry.fastapi import GraphQLRouter
 
 # Import models & schema
 from src.models.user import User
@@ -17,52 +14,26 @@ from src.models.swarm import Swarm
 from src.models.message import Message
 from src.graphql.schema import schema
 from src.middleware.auth import get_user_id_from_request
-from strawberry.fastapi import GraphQLRouter
 
-# 1. Initialize Socket.io Server
-sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins="*")
-socket_app = socketio.ASGIApp(sio)
+load_dotenv()
 
 app = FastAPI(title="UniBees Hive API")
 
-# 2. Middleware
+# --- THE FIX: Robust CORS Configuration ---
+origins = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=origins, # Specifically allow your frontend
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["*"],    # Allow GET, POST, OPTIONS, etc.
+    allow_headers=["*"],    # Allow Authorization, Content-Type, etc.
 )
 
-# 3. Socket.io Event Handlers
-@sio.event
-async def connect(sid, environ):
-    print(f"🐝 Bee {sid} entered the hive connection.")
-
-@sio.on("join_swarm")
-async def handle_join(sid, data):
-    swarm_id = data.get("swarm_id")
-    await sio.enter_room(sid, swarm_id)
-    print(f"🐝 Bee {sid} joined swarm room: {swarm_id}")
-
-@sio.on("send_message")
-async def handle_message(sid, data):
-    # Save message to MongoDB
-    new_msg = Message(
-        swarm_id=data["swarm_id"],
-        sender_id=data["sender_id"],
-        sender_name=data["sender_name"],
-        sender_image=data["sender_image"],
-        text=data["text"],
-        timestamp=datetime.utcnow()
-    )
-
-    await new_msg.insert()
-
-    # Broadcast to swarm room
-    await sio.emit("receive_message", data, room=data["swarm_id"])
-
-# 4. GraphQL Setup
+# --- GraphQL Setup ---
 async def get_context(request: Request):
     user_id = get_user_id_from_request(request)
     return {"user_id": user_id}
@@ -70,36 +41,62 @@ async def get_context(request: Request):
 graphql_app = GraphQLRouter(schema, context_getter=get_context)
 app.include_router(graphql_app, prefix="/graphql")
 
-# 5. Startup: Connect to MongoDB
+# --- Socket.io Setup ---
+sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
+socket_app = socketio.ASGIApp(sio, app)
+
 @app.on_event("startup")
 async def startup_event():
-    mongo_uri = os.getenv("MONGODB_URI")
+    client = AsyncIOMotorClient(os.getenv("MONGODB_URI"))
+    await init_beanie(
+        database=client.unibees_db, 
+        document_models=[User, Swarm, Message]
+    )
+    print("🚀 Hive DB Connected & CORS Policy Active")
 
-    if not mongo_uri:
-        raise ValueError("❌ MONGODB_URI not found in .env file")
+# --- THE FIX: Socket.io Event Handlers for Database Persistence ---
 
-    try:
-        client = AsyncIOMotorClient(
-            mongo_uri,
-            tls=True,
-            tlsCAFile=certifi.where(),
-            serverSelectionTimeoutMS=5000
-        )
+@sio.event
+async def connect(sid, environ):
+    print(f"Bee connected: {sid}")
 
-        # Test connection
-        await client.admin.command("ping")
+@sio.event
+async def join_swarm(sid, data):
+    """Adds a bee to a specific swarm room for targeted broadcasting."""
+    swarm_id = data.get("swarm_id")
+    if swarm_id:
+        await sio.enter_room(sid, swarm_id)
+        print(f"Bee {sid} joined swarm {swarm_id}")
 
-        await init_beanie(
-            database=client.unibees_db,
-            document_models=[User, Swarm, Message]
-        )
+@sio.event
+async def send_message(sid, data):
+    """
+    Receives a message from the frontend, persists it to MongoDB,
+    and broadcasts it back to everyone in the swarm.
+    """
+    swarm_id = data.get("swarm_id")
+    
+    # 1. Map incoming data to our Beanie Message model
+    # Note: Using data.get to safely handle both snake_case and camelCase from frontend
+    new_msg = Message(
+        swarm_id=swarm_id,
+        sender_id=data.get("sender_id") or data.get("senderId"),
+        sender_name=data.get("sender_name") or data.get("senderName"),
+        sender_image=data.get("sender_image") or data.get("senderImage") or "",
+        text=data.get("text"),
+        timestamp=datetime.utcnow()
+    )
 
-        print("🚀 Hive DB Connected (Users, Swarms & Messages Active)")
+    # 2. Persist to MongoDB Atlas
+    await new_msg.insert()
 
-    except Exception as e:
-        print("❌ MongoDB connection failed")
-        print(e)
-        raise e
+    # 3. Broadcast to everyone in the swarm room (Real-time)
+    # We include the new DB generated ID in the broadcast
+    broadcast_data = new_msg.to_dict() if hasattr(new_msg, 'to_dict') else data
+    await sio.emit("receive_message", broadcast_data, room=swarm_id)
+    print(f"Buzz saved and broadcasted in swarm {swarm_id}")
 
-# 6. Mount Socket.io
-app.mount("/", socket_app)
+@sio.event
+async def disconnect(sid):
+    print(f"Bee left the hive: {sid}")
+    
