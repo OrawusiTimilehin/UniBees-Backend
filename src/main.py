@@ -120,5 +120,26 @@ async def send_friend_request(sid, data):
     print(f"Notification sent to {target_user_id} from {sender_name}")
 
 @sio.event
+async def send_friend_request(sid, data):
+    to_id = data.get("to_user_id")
+    from_name = data.get("from_name", "Unknown Bee") # Ensure this exists!
+    
+    new_notif = Notification(
+        to_user_id=to_id,
+        from_user_id=data.get("from_user_id"),
+        from_name=from_name,
+        message=f"{from_name} wants to connect!"
+    )
+    
+    await new_notif.insert()
+    
+    await sio.emit("new_notification", {
+        "id": str(new_notif.id), # MongoDB ID
+        "from_name": from_name,
+        "from_user_id": data.get("from_user_id"),
+        "message": new_notif.message
+    }, room=to_id)
+
+@sio.event
 async def disconnect(sid):
     print(f"Bee left the hive: {sid}")

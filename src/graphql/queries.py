@@ -5,6 +5,8 @@ from src.models.swarm import Swarm
 from src.models.message import Message
 from src.models.notification import Notification
 from src.graphql.types import UserType, SwarmType, MessageType, NotificationType
+from src.middleware.auth import get_user_id_from_request
+from bson import ObjectId
 
 @strawberry.type
 class Query:
@@ -107,3 +109,25 @@ class Query:
         }).sort("-timestamp").limit(50).to_list()
 
         return messages[::-1]
+    
+    
+
+    @strawberry.field
+    async def my_friends(self, info: strawberry.Info) -> List[UserType]:
+        # 1. Get current user
+        try:
+            request = info.context.request
+        except AttributeError:
+            request = info.context["request"]
+            
+        my_id = get_user_id_from_request(request)
+        me = await User.get(my_id)
+        
+        if not me or not me.friends:
+            return []
+
+        # 2. Convert string IDs to ObjectIds and find them in the 'users' collection
+        # (Using set() handles those duplicate IDs we saw in your screenshot!)
+        friend_object_ids = [ObjectId(f) for f in set(me.friends)]
+        
+        return await User.find({"_id": {"$in": friend_object_ids}}).to_list()

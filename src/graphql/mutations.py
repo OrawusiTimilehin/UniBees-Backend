@@ -4,6 +4,7 @@ import jwt
 import os
 from datetime import datetime, timedelta
 from typing import List, Optional
+from src.middleware.auth import get_user_id_from_request
 from src.models.user import User
 from src.graphql.types import UserType, AuthPayload
 from src.models.swarm import Swarm
@@ -221,44 +222,51 @@ class Mutation:
         self, 
         info: strawberry.Info, 
         notification_id: str, 
-        action: str # "ACCEPT" or "IGNORE"
+        action: str
     ) -> bool:
-        """
-        Finalizes the social handshake. 
-        If ACCEPTED, both bees are added to each other's friend lists.
-        """
-        user_id = info.context.get("user_id")
-        if not user_id:
-            raise Exception("Unauthorized")
+        # 1. FIX: Access context as a dictionary if dot notation fails
+        try:
+            request = info.context.request
+        except AttributeError:
+            request = info.context["request"]
 
+        my_id = get_user_id_from_request(request)
+        if not my_id: return False
+
+        # 2. GHOST ID CHECK (Prevents the PydanticObjectId crash)
+        if notification_id.startswith("temp-"):
+            return True
+
+        # 3. PROCEED WITH DB LOGIC
         notif = await Notification.get(notification_id)
-        if not notif or notif.to_user_id != user_id:
-            raise Exception("Notification not found or unauthorized.")
+        if not notif: return False
 
         if action == "ACCEPT":
-            # 1. Update Recipient's Friends
-            me = await User.get(user_id)
-            if not hasattr(me, 'friends'):
-                me.friends = []
-                
-            if notif.from_user_id not in me.friends:
-                me.friends.append(notif.from_user_id)
-                await me.save()
-
-            # 2. Update Sender's Friends
+            me = await User.get(my_id)
             sender = await User.get(notif.from_user_id)
-            if not hasattr(sender, 'friends'):
-                sender.friends = []
-                
-            if user_id not in sender.friends:
-                sender.friends.append(user_id)
-                await sender.save()
-            
-            notif.status = "ACCEPTED"
-        else:
-            notif.status = "IGNORED"
 
-        await notif.save()
+            if me and sender:
+                # Ensure friends list exists and update
+                if not hasattr(me, 'friends') or me.friends is None: me.friends = []
+                if not hasattr(sender, 'friends') or sender.friends is None: sender.friends = []
+
+                if str(sender.id) not in me.friends:
+                    me.friends.append(str(sender.id))
+                    await me.save()
+                
+                if str(me.id) not in sender.friends:
+                    sender.friends.append(str(me.id))
+                    await sender.save()
+                
+                print(f"✅ {me.name} and {sender.name} are now friends!")
+
+        await notif.delete()
         return True
-    
+
+    @strawberry.mutation
+    async def delete_notification(self, info: strawberry.Info, notification_id: str) -> bool:
+        notif = await Notification.get(notification_id)
+        if notif:
+            await notif.delete()
+        return True
     

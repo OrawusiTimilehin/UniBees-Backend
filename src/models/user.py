@@ -25,7 +25,6 @@ class User(Document):
     image: str = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400"
     created_at: datetime = Field(default_factory=datetime.utcnow)
     friends: List[str] = []
-    
     swarms_joined: List[str] = []
     image: str = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400"
     created_at: datetime = Field(default_factory=datetime.utcnow)
