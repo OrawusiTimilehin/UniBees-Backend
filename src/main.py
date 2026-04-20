@@ -140,6 +140,31 @@ async def send_friend_request(sid, data):
         "message": new_notif.message
     }, room=to_id)
 
+
+@sio.event
+async def send_private_message(sid, data):
+    recipient_id = data.get("recipient_id")
+    sender_id = data.get("sender_id")
+    
+    # Persist in MongoDB
+    new_msg = Message(
+        recipient_id=recipient_id,
+        sender_id=sender_id,
+        sender_name=data.get("sender_name"),
+        text=data.get("text"),
+        timestamp=datetime.utcnow()
+    )
+    await new_msg.insert()
+
+    # Emit to the recipient's room
+    await sio.emit("receive_private_message", new_msg.to_dict(), room=recipient_id)
+    
+    # Emit back to sender (to sync messages across multiple open tabs)
+    await sio.emit("receive_private_message", new_msg.to_dict(), room=sender_id)
+
+
+
+
 @sio.event
 async def disconnect(sid):
     print(f"Bee left the hive: {sid}")
