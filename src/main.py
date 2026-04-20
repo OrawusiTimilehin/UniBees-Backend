@@ -13,7 +13,7 @@ from src.models.user import User
 from src.models.swarm import Swarm
 from src.models.message import Message
 # Note: Ensure you create a Notification model in your models folder
-# from src.models.notification import Notification 
+from src.models.notification import Notification 
 
 from src.graphql.schema import schema
 from src.middleware.auth import get_user_id_from_request
@@ -54,7 +54,7 @@ async def startup_event():
     # Ensure all social models are initialized here
     await init_beanie(
         database=client.unibees_db, 
-        document_models=[User, Swarm, Message]
+        document_models=[User, Swarm, Message, Notification]
     )
     print("🚀 Hive DB Connected & Social Features Active")
 
