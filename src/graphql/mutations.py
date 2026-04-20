@@ -10,12 +10,26 @@ from src.graphql.types import UserType, AuthPayload, SwarmType
 from src.models.notification import Notification
 from src.graphql.types import NotificationType  
 
-def create_token(user_id: str):
+
+# JWT Configuration
+JWT_SECRET = os.getenv("JWT_SECRET")
+
+if not JWT_SECRET:
+    raise RuntimeError("JWT_SECRET environment variable is not set. The hive cannot start securely.")
+
+def create_token(user_id: str) -> str:
+    """
+    Generates a secure Digital ID (JWT) with expiration.
+    - exp: Token expires in 30 days.
+    - iat: Identifies the time at which the JWT was issued.
+    """
     payload = {
         "user_id": user_id,
-        "exp": datetime.utcnow() + timedelta(days=30)
+        "exp": datetime.utcnow() + timedelta(days=30),
+        "iat": datetime.utcnow()
     }
-    return jwt.encode(payload, os.getenv("JWT_SECRET", "hive_secret_key"), algorithm="HS256")
+    return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
+
 
 @strawberry.type
 class Mutation:
@@ -232,6 +246,46 @@ class Mutation:
             if not hasattr(sender, 'friends'):
                 sender.friends = []
                 
+            if user_id not in sender.friends:
+                sender.friends.append(user_id)
+                await sender.save()
+            
+            notif.status = "ACCEPTED"
+        else:
+            notif.status = "IGNORED"
+
+        await notif.save()
+        return True
+    
+    
+
+    @strawberry.mutation
+    async def respond_to_friend_request(
+        self, 
+        info: strawberry.Info, 
+        notification_id: str, 
+        action: str # "ACCEPT" or "IGNORE"
+    ) -> bool:
+        """
+        Finalizes a social connection. 
+        If ACCEPTED, both bees are added to each other's friend lists in MongoDB.
+        """
+        user_id = info.context.get("user_id")
+        if not user_id: raise Exception("Unauthorized")
+
+        notif = await Notification.get(notification_id)
+        if not notif or not notif.to_user_id != user_id:
+            raise Exception("Request not found or unauthorized.")
+
+        if action == "ACCEPT":
+            me = await User.get(user_id)
+            sender = await User.get(notif.from_user_id)
+            
+            # Reciprocal update
+            if notif.from_user_id not in me.friends:
+                me.friends.append(notif.from_user_id)
+                await me.save()
+
             if user_id not in sender.friends:
                 sender.friends.append(user_id)
                 await sender.save()
