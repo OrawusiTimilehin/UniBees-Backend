@@ -1,3 +1,4 @@
+from dotenv import load_dotenv
 import strawberry
 import jwt
 import os
@@ -10,6 +11,9 @@ from src.graphql.types import UserType, AuthPayload, SwarmType
 from src.models.notification import Notification
 from src.graphql.types import NotificationType  
 
+
+# Load environment variables from .env file
+load_dotenv()
 
 # JWT Configuration
 JWT_SECRET = os.getenv("JWT_SECRET")

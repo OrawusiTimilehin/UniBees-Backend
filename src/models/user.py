@@ -28,7 +28,7 @@ class User(Document):
     
     swarms_joined: List[str] = []
     image: str = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400"
-    created_at: datetime.datetime = Field(default_factory=datetime.datetime.utcnow)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
 
     class Settings:
         # Collection name set to 'unibees'
