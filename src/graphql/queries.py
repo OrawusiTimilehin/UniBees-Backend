@@ -131,3 +131,25 @@ class Query:
         friend_object_ids = [ObjectId(f) for f in set(me.friends)]
         
         return await User.find({"_id": {"$in": friend_object_ids}}).to_list()
+    
+    @strawberry.field
+    async def get_private_messages(self, info: strawberry.Info, other_user_id: str) -> List[MessageType]:
+        # 1. Identify me
+        try:
+            request = info.context.request
+        except AttributeError:
+            request = info.context["request"]
+            
+        my_id = get_user_id_from_request(request)
+        if not my_id: return []
+
+        # 2. Fetch messages where (Me -> Ryan) OR (Ryan -> Me)
+        messages = await Message.find({
+            "$or": [
+                {"sender_id": my_id, "recipient_id": other_user_id},
+                {"sender_id": other_user_id, "recipient_id": my_id}
+            ]
+        }).sort("timestamp").to_list()
+
+        return messages
+
