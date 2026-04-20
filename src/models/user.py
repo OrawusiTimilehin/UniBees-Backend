@@ -24,6 +24,11 @@ class User(Document):
     swarms_joined: List[str] = []
     image: str = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400"
     created_at: datetime = Field(default_factory=datetime.utcnow)
+    friends: List[str] = []
+    
+    swarms_joined: List[str] = []
+    image: str = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400"
+    created_at: datetime.datetime = Field(default_factory=datetime.datetime.utcnow)
 
     class Settings:
         # Collection name set to 'unibees'
@@ -42,8 +47,18 @@ class User(Document):
         Handles both new Argon2 hashes and old Bcrypt hashes automatically.
         """
         return pwd_context.verify(plain_password, self.password)
+    
+    class Settings:
+        name = "users"
+
+    async def set_password(self, plain_password: str):
+        self.password = pwd_context.hash(plain_password)
+
+    def verify_password(self, plain_password: str) -> bool:
+        return pwd_context.verify(plain_password, self.password)
 
     @classmethod
     async def by_email(cls, email: str) -> Optional["User"]:
         """Helper to find a user by email."""
         return await cls.find_one(cls.email == email.lower())
+    

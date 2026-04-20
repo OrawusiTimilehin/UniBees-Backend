@@ -7,6 +7,8 @@ from src.models.user import User
 from src.graphql.types import UserType, AuthPayload
 from src.models.swarm import Swarm
 from src.graphql.types import UserType, AuthPayload, SwarmType
+from src.models.notification import Notification
+from src.graphql.types import NotificationType  
 
 def create_token(user_id: str):
     payload = {
@@ -195,3 +197,48 @@ class Mutation:
             await user.save()
             
         return swarm
+    
+    @strawberry.mutation
+    async def respond_to_friend_request(
+        self, 
+        info: strawberry.Info, 
+        notification_id: str, 
+        action: str # "ACCEPT" or "IGNORE"
+    ) -> bool:
+        """
+        Finalizes the social handshake. 
+        If ACCEPTED, both bees are added to each other's friend lists.
+        """
+        user_id = info.context.get("user_id")
+        if not user_id:
+            raise Exception("Unauthorized")
+
+        notif = await Notification.get(notification_id)
+        if not notif or notif.to_user_id != user_id:
+            raise Exception("Notification not found or unauthorized.")
+
+        if action == "ACCEPT":
+            # 1. Update Recipient's Friends
+            me = await User.get(user_id)
+            if not hasattr(me, 'friends'):
+                me.friends = []
+                
+            if notif.from_user_id not in me.friends:
+                me.friends.append(notif.from_user_id)
+                await me.save()
+
+            # 2. Update Sender's Friends
+            sender = await User.get(notif.from_user_id)
+            if not hasattr(sender, 'friends'):
+                sender.friends = []
+                
+            if user_id not in sender.friends:
+                sender.friends.append(user_id)
+                await sender.save()
+            
+            notif.status = "ACCEPTED"
+        else:
+            notif.status = "IGNORED"
+
+        await notif.save()
+        return True
