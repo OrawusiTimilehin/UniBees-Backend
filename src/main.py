@@ -18,6 +18,7 @@ from src.models.notification import Notification
 from src.graphql.schema import schema
 from src.middleware.auth import get_user_id_from_request
 
+
 load_dotenv()
 
 app = FastAPI(title="UniBees Hive API")
@@ -163,6 +164,42 @@ async def send_private_message(sid, data):
     await sio.emit("receive_private_message", new_msg.to_dict(), room=sender_id)
 
 
+@sio.event
+async def send_message(sid, data):
+    swarm_id = data.get("swarm_id")
+    swarm = await Swarm.get(swarm_id)
+    if not swarm: return
+
+    # --- ALGORITHM START ---
+    limit = 100.0
+    base_boost = 5.0
+    
+    # 1. Calculate "Recent Density" (Reinforcement R)
+    # Check messages in the last 2 minutes to see if we're in a "Frenzy"
+    recent_count = await Message.find(
+        Message.swarm_id == swarm_id,
+        Message.timestamp > datetime.utcnow() - timedelta(minutes=2)
+    ).count()
+    
+    # R scales from 1.0 to 2.0 based on crowd activity
+    reinforcement_r = 1.0 + (min(recent_count, 10) / 10.0)
+    
+    # 2. Apply Asymptotic Braking (prevents overshooting 100)
+    braking_factor = 1 - (swarm.pheromone_base / limit)
+    actual_boost = (base_boost * reinforcement_r) * braking_factor
+    
+    # 3. Update the Swarm
+    new_score = min(limit, swarm.pheromone_base + actual_boost)
+    await swarm.update({"$set": {
+        "pheromone_base": new_score,
+        "last_buzz_at": datetime.utcnow()
+    }})
+    # --- ALGORITHM END ---
+
+    # Save and emit message as normal...
+    new_msg = Message(**data)
+    await new_msg.insert()
+    await sio.emit("receive_message", new_msg.to_dict(), room=swarm_id)
 
 
 @sio.event

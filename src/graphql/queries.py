@@ -8,6 +8,8 @@ from src.graphql.types import UserType, SwarmType, MessageType, NotificationType
 from src.middleware.auth import get_user_id_from_request
 from bson import ObjectId
 
+from utils.swarm_intelligence import calculate_current_nectar
+
 @strawberry.type
 class Query:
     #  USER QUERIES 
@@ -152,4 +154,13 @@ class Query:
         }).sort("timestamp").to_list()
 
         return messages
+    
+    @strawberry.field
+    async def swarms(self) -> List[SwarmType]:
+        all_swarms = await Swarm.find_all().to_list()
+        for s in all_swarms:
+            # Calculate the dynamic nectar quality right before sending to React
+            s.nectar_quality = calculate_current_nectar(s)
+        return sorted(all_swarms, key=lambda x: x.nectar_quality, reverse=True)
+
 

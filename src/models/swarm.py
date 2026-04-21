@@ -16,6 +16,13 @@ class Swarm(Document):
     nectar_quality: float = 0.0 # Activity/Reputation score
     image: str = "https://images.unsplash.com/photo-1517048676732-d65bc937f952?w=400"
     created_at: datetime = Field(default_factory=datetime.utcnow)
+    pheromone_base: float = 10.0      
+    upvotes: int = 0
+    last_buzz_at: datetime = Field(default_factory=datetime.utcnow)
+
+    
 
     class Settings:
         name = "swarms"
+
+    
