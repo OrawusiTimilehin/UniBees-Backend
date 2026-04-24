@@ -8,7 +8,7 @@ from src.graphql.types import UserType, SwarmType, MessageType, NotificationType
 from src.middleware.auth import get_user_id_from_request
 from bson import ObjectId
 
-from utils.swarm_intelligence import calculate_current_nectar
+from src.utils.swarm_intelligence import calculate_current_nectar
 
 @strawberry.type
 class Query:
