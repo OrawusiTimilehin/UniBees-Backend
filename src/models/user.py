@@ -28,10 +28,20 @@ class User(Document):
     swarms_joined: List[str] = []
     image: str = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400"
     created_at: datetime = Field(default_factory=datetime.utcnow)
+    participated_swarms: List[str] = []
+    swipes_today: int = 0
+    last_swipe_reset: datetime= Field(default_factory=datetime.utcnow)
+    seen_bee_ids: List[str] = []
+    liked_bee_ids: List[str] = [] 
 
     class Settings:
-        # Collection name set to 'unibees'
         name = "users" 
+
+    def check_and_reset_quota(self):
+        now = datetime.datetime.utcnow()
+        if self.last_swipe_reset.date() < now.date():
+            self.swipes_today = 0
+            self.last_swipe_reset = now
 
     async def set_password(self, plain_password: str):
         """
@@ -60,4 +70,5 @@ class User(Document):
     async def by_email(cls, email: str) -> Optional["User"]:
         """Helper to find a user by email."""
         return await cls.find_one(cls.email == email.lower())
+    
     
