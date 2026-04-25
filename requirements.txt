@@ -1,8 +1,13 @@
 annotated-doc==0.0.4
 annotated-types==0.7.0
 anyio==4.12.1
+argon2-cffi==25.1.0
+argon2-cffi-bindings==25.1.0
+bcrypt==5.0.0
 beanie==2.0.1
 bidict==0.23.1
+certifi==2026.2.25
+cffi==2.0.0
 click==8.3.1
 cross-web==0.4.1
 dnspython==2.8.0
@@ -15,6 +20,7 @@ lazy-model==0.4.0
 motor==3.7.1
 packaging==26.0
 passlib==1.7.4
+pycparser==3.0
 pydantic==2.12.5
 pydantic_core==2.41.5
 PyJWT==2.11.0
