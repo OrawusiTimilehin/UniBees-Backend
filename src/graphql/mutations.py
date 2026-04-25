@@ -38,7 +38,7 @@ def create_token(user_id: str) -> str:
 
 @strawberry.type
 class Mutation:
-    # --- SIGNUP & LOGIN (Existing) ---
+    # SIGNUP & LOGIN 
     @strawberry.mutation
     async def signup(self, username: str, email: str, password: str, name: str) -> AuthPayload:
         email_clean = email.lower()
@@ -57,7 +57,7 @@ class Mutation:
             raise Exception("Invalid credentials")
         return AuthPayload(token=create_token(str(user.id)), user=user)
 
-    # --- PROFILE UPDATES (NEW) ---
+    # PROFILE UPDATES
 
     @strawberry.mutation
     async def update_interests(self, info: strawberry.Info, interests: List[str]) -> UserType:
@@ -82,7 +82,6 @@ class Mutation:
             raise Exception("Unauthorized action.")
         
         user = await User.get(user_id)
-        # Hashing happens inside the set_password model helper
         await user.set_password(new_password)
         await user.save()
         
@@ -119,7 +118,7 @@ class Mutation:
         return user
     
 
- # --- SWARM OPERATIONS ---
+ # SWARM OPERATIONS 
 
     @strawberry.mutation
     async def create_swarm(
@@ -205,12 +204,12 @@ class Mutation:
         if not swarm or not user:
             raise Exception("Swarm or User not found.")
 
-        # 1. Update Swarm Members
+        #  Update Swarm Members
         if user_id not in swarm.members:
             swarm.members.append(user_id)
             await swarm.save()
             
-        # 2. Update User's Joined Swarms
+        #  Update User's Joined Swarms
         if swarm_id not in user.swarms_joined:
             user.swarms_joined.append(swarm_id)
             await user.save()
@@ -224,7 +223,7 @@ class Mutation:
         notification_id: str, 
         action: str
     ) -> bool:
-        # 1. FIX: Access context as a dictionary if dot notation fails
+        # Access context as a dictionary if dot notation fails
         try:
             request = info.context.request
         except AttributeError:
@@ -233,11 +232,11 @@ class Mutation:
         my_id = get_user_id_from_request(request)
         if not my_id: return False
 
-        # 2. GHOST ID CHECK (Prevents the PydanticObjectId crash)
+        # GHOST ID CHECK (Prevents the PydanticObjectId crash)
         if notification_id.startswith("temp-"):
             return True
 
-        # 3. PROCEED WITH DB LOGIC
+        # PROCEED WITH DB LOGIC
         notif = await Notification.get(notification_id)
         if not notif: return False
 
