@@ -18,7 +18,6 @@ class Query:
     async def me(self, info: strawberry.Info) -> Optional[UserType]:
         """
         Retrieves the currently authenticated bee's profile.
-        Uses the 'user_id' provided by the JWT middleware context.
         """
         user_id = info.context.get("user_id")
         if not user_id:
@@ -54,7 +53,6 @@ class Query:
         if not user_id:
             return []
         
-        # We only show PENDING requests so they don't clutter the UI
         return await Notification.find(
             Notification.to_user_id == user_id,
             Notification.status == "PENDING"
@@ -96,13 +94,11 @@ class Query:
     async def get_private_messages(self, info: strawberry.Info, other_user_id: str) -> List[MessageType]:
         """
         Loads the history for a 1-on-1 personal chat.
-        Fetches messages where (Me -> Them) OR (Them -> Me).
         """
         user_id = info.context.get("user_id")
         if not user_id:
             return []
 
-        # Complex query for bidirectional private messages
         messages = await Message.find({
             "$or": [
                 {"sender_id": user_id, "recipient_id": other_user_id},
@@ -116,7 +112,6 @@ class Query:
 
     @strawberry.field
     async def my_friends(self, info: strawberry.Info) -> List[UserType]:
-        # 1. Get current user
         try:
             request = info.context.request
         except AttributeError:
@@ -128,15 +123,14 @@ class Query:
         if not me or not me.friends:
             return []
 
-        # 2. Convert string IDs to ObjectIds and find them in the 'users' collection
-        # (Using set() handles those duplicate IDs we saw in your screenshot!)
         friend_object_ids = [ObjectId(f) for f in set(me.friends)]
         
         return await User.find({"_id": {"$in": friend_object_ids}}).to_list()
     
+
+    
     @strawberry.field
     async def get_private_messages(self, info: strawberry.Info, other_user_id: str) -> List[MessageType]:
-        # 1. Identify me
         try:
             request = info.context.request
         except AttributeError:
@@ -145,7 +139,6 @@ class Query:
         my_id = get_user_id_from_request(request)
         if not my_id: return []
 
-        # 2. Fetch messages where (Me -> Ryan) OR (Ryan -> Me)
         messages = await Message.find({
             "$or": [
                 {"sender_id": my_id, "recipient_id": other_user_id},
@@ -159,7 +152,6 @@ class Query:
     async def swarms(self) -> List[SwarmType]:
         all_swarms = await Swarm.find_all().to_list()
         for s in all_swarms:
-            # Calculate the dynamic nectar quality right before sending to React
             s.nectar_quality = calculate_current_nectar(s)
         return sorted(all_swarms, key=lambda x: x.nectar_quality, reverse=True)
 
@@ -169,9 +161,7 @@ class Query:
     async def discover_bees(self, info: strawberry.Info) -> List[UserType]:
         """
         THE DISCOVERY ENGINE:
-        Finds all bees in the hive regardless of online status or swipe history.
-        This ensures the BeesMatch page always has profiles to show, even if 
-        you have already swiped on them in a previous session.
+        This is the heart of the matching algorithm. It retrieves a list of potential matches for the logged-in bee.
         """
         user_id = info.context.get("user_id")
         if not user_id:
@@ -181,13 +171,10 @@ class Query:
         if not me:
             raise Exception("Bee record not found")
 
-        # SCRAPPED: Filtering by 'seen_bee_ids' and 'is_online' status.
-        # We now query for every user document where the ID is NOT equal to the current user's ID.
         available_bees = await User.find(
             User.id != me.id
         ).to_list()
 
-        # DEBUG LOGS: Check your terminal to see the count of bees found.
-        print(f"🐝 Discovery Sync: Found {len(available_bees)} other bees for {me.name} to match with.")
+        print(f" Discovery Sync: Found {len(available_bees)} other bees for {me.name} to match with.")
 
         return available_bees

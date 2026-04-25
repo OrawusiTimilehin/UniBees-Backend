@@ -4,7 +4,7 @@ from pydantic import Field
 
 class Notification(Document):
     """
-    Persists friend requests so they can be viewed even if the user was offline.
+    Notification Model
     """
     to_user_id: Indexed(str)
     from_user_id: str
