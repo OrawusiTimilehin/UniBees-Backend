@@ -9,25 +9,26 @@ from dotenv import load_dotenv
 import socketio
 from strawberry.fastapi import GraphQLRouter
 
-# Import models & schema
+# models & schema
 from src.models.user import User
 from src.models.swarm import Swarm
 from src.models.message import Message
 from src.models.notification import Notification 
-
 from src.graphql.schema import schema
+
 from src.middleware.auth import get_user_id_from_request
 
 load_dotenv()
 
 app = FastAPI(title="UniBees Hive API")
 
-# --- CORS Configuration ---
-# Ensure this matches your Vite frontend port (usually 5173)
+# CORS Configuration 
 origins = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
 ]
+
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -37,7 +38,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- GraphQL Setup ---
+
+# GraphQL Setup
 async def get_context(request: Request):
     user_id = get_user_id_from_request(request)
     return {"user_id": user_id}
@@ -45,8 +47,7 @@ async def get_context(request: Request):
 graphql_app = GraphQLRouter(schema, context_getter=get_context)
 app.include_router(graphql_app, prefix="/graphql")
 
-# --- Socket.io Setup ---
-# Set logger=True to see every single packet in your terminal for debugging
+# Socket.io 
 sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*', logger=False, engineio_logger=False)
 socket_app = socketio.ASGIApp(sio, app)
 
@@ -58,39 +59,37 @@ async def startup_event():
             database=client.unibees_db, 
             document_models=[User, Swarm, Message, Notification]
         )
-        print("🚀 Hive persistence layers active (Messages, Swarms, Notifications & Matching)")
+        print(" Hive MongoDBactive (Messages, Swarms, Notifications & Matching)")
     except Exception as e:
-        print(f"❌ DATABASE STARTUP ERROR: {e}")
+        print(f"DATABASE STARTUP ERROR: {e}")
 
-# --- Socket.io Event Handlers ---
+# Socket.io Event Handlers
 
 @sio.event
 async def connect(sid, environ):
-    print(f"📡 Bee connected to socket: {sid}")
+    print(f"Bee connected to socket: {sid}")
 
 @sio.event
 async def identify_bee(sid, data):
     """
-    CRITICAL SESSION FIX:
     Maps the connection to a room named exactly after the user_id.
     """
     if not data: return
     
-    # Handle both {user_id: "..."} and direct string input
+    # Handles both {user_id: "..."} and direct string input
     raw_id = data.get("user_id") if isinstance(data, dict) else data
     user_id = str(raw_id).strip()
 
     if user_id and user_id != "None" and user_id != "undefined":
-        # Leave any old rooms first to prevent ghosting
         rooms = sio.rooms(sid)
         for room in rooms:
             if room != sid: await sio.leave_room(sid, room)
             
         await sio.enter_room(sid, user_id)
         await sio.save_session(sid, {"user_id": user_id})
-        print(f"🆔 Bee {user_id} identified and locked into private room.")
+        print(f" Bee {user_id} identified and locked into private room.")
     else:
-        print(f"⚠️ Identification failed: Received invalid ID '{user_id}'")
+        print(f"Identification failed: Received invalid ID '{user_id}'")
 
 @sio.event
 async def join_swarm(sid, data):
@@ -103,7 +102,7 @@ async def join_swarm(sid, data):
         session["current_swarm"] = swarm_id
         await sio.save_session(sid, session)
 
-        # Real-time Presence Tracking
+        # Real time presence Tracking
         participants = sio.manager.rooms.get('/', {}).get(swarm_id, set())
         active_count = len(participants)
 
@@ -111,11 +110,11 @@ async def join_swarm(sid, data):
             "swarm_id": swarm_id,
             "active_bees": active_count
         }, room=swarm_id)
-        print(f"🏠 Bee {sid} joined group swarm: {swarm_id} (Total: {active_count})")
+        print(f"Bee {sid} joined group swarm: {swarm_id} (Total: {active_count})")
 
 @sio.event
 async def send_message(sid, data):
-    """Unified Swarm Messaging Handler with Stigmergic Algorithm."""
+    """Swarm Messaging Handler with Stigmergic Algorithm."""
     swarm_id = str(data.get("swarm_id")).strip()
     text = data.get("text")
     sender_id = str(data.get("sender_id") or data.get("senderId")).strip()
@@ -131,13 +130,13 @@ async def send_message(sid, data):
         )
         await new_msg.insert()
 
-        # Update User Participation for Matching Algorithm
+        # Update user participation for algo
         user = await User.get(sender_id)
         if user and swarm_id not in user.participated_swarms:
             user.participated_swarms.append(swarm_id)
             await user.save()
 
-        # Run Pheromone Algorithm
+        # run phereomone boost algorithm
         swarm = await Swarm.get(swarm_id)
         if swarm:
             curr_p = getattr(swarm, 'pheromone_base', 10.0) or 10.0
@@ -149,23 +148,23 @@ async def send_message(sid, data):
                 "last_buzz_at": datetime.utcnow()
             }})
 
-        # BROADCAST: Ensure the model has to_dict or fallback to raw dict
+        
         payload = new_msg.to_dict() if hasattr(new_msg, 'to_dict') else json.loads(new_msg.json())
         await sio.emit("receive_message", payload, room=swarm_id)
-        print(f"💬 Swarm buzz from {sender_name} synced in {swarm_id}")
+        print(f"Swarm buzz from {sender_name} synced in {swarm_id}")
 
     except Exception as e:
-        print(f"❌ SWARM MESSAGE ERROR: {e}")
+        print(f"SWARM MESSAGE ERROR: {e}")
 
 @sio.event
 async def send_private_message(sid, data):
-    """Direct Bee-to-Bee communication via room routing."""
+    """Handles private messaging between two users, ensuring delivery to both sender and recipient rooms."""
     recipient_id = str(data.get("recipient_id") or data.get("recipientId")).strip()
     sender_id = str(data.get("sender_id") or data.get("senderId")).strip()
     sender_name = data.get("sender_name") or data.get("senderName")
     text = data.get("text")
     
-    print(f"📩 Routing buzz: {sender_id} -> {recipient_id}")
+    print(f"Routing buzz: {sender_id} -> {recipient_id}")
 
     try:
         new_msg = Message(
@@ -179,18 +178,18 @@ async def send_private_message(sid, data):
         
         payload = new_msg.to_dict() if hasattr(new_msg, 'to_dict') else json.loads(new_msg.json())
         
-        # 1. Send to Recipient's Room
+        #  Send to Recipient's Room
         await sio.emit("receive_private_message", payload, room=recipient_id)
-        # 2. Send back to Sender (for sync across multiple tabs/devices)
+        #  Send back to Sender 
         await sio.emit("receive_private_message", payload, room=sender_id)
         
-        print(f"✅ Real-time private buzz delivered to rooms.")
+        print(f"Real-time private buzz delivered to rooms.")
     except Exception as e:
-        print(f"❌ PRIVATE MESSAGE ERROR: {e}")
+        print(f"PRIVATE MESSAGE ERROR: {e}")
 
 @sio.event
 async def handle_swipe(sid, data):
-    """Enforces 5-swipe limit and checks for Hive Matches."""
+    """Enforces 5 swipe limit and checks for Hive Matches."""
     user_id = str(data.get("user_id")).strip()
     target_id = str(data.get("target_id")).strip()
     action = data.get("action")
@@ -199,6 +198,7 @@ async def handle_swipe(sid, data):
         me = await User.get(user_id)
         target = await User.get(target_id)
         if not me or not target: return
+
 
         # Quota Logic
         now = datetime.utcnow()
@@ -227,7 +227,8 @@ async def handle_swipe(sid, data):
         await target.save()
         await sio.emit("swipe_success", {"swipes_today": me.swipes_today}, room=user_id)
     except Exception as e:
-        print(f"❌ SWIPE ERROR: {e}")
+        print(f"SWIPE ERROR: {e}")
+
 
 @sio.event
 async def disconnect(sid):
@@ -237,6 +238,6 @@ async def disconnect(sid):
         participants = sio.manager.rooms.get('/', {}).get(swarm_id, set())
         active_count = len(participants)
         await sio.emit("swarm_presence_update", {"swarm_id": swarm_id, "active_bees": active_count}, room=swarm_id)
-    print(f"👋 Bee disconnected: {sid}")
+    print(f" Bee disconnected: {sid}")
 
 # RUN COMMAND: uvicorn main:socket_app --reload --port 8000
