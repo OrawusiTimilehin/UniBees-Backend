@@ -26,6 +26,7 @@ app = FastAPI(title="UniBees Hive API")
 origins = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    "https://uni-bees.vercel.app"
 ]
 
 
