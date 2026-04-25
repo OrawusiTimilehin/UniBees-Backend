@@ -76,7 +76,6 @@ async def identify_bee(sid, data):
     """
     if not data: return
     
-    # Handles both {user_id: "..."} and direct string input
     raw_id = data.get("user_id") if isinstance(data, dict) else data
     user_id = str(raw_id).strip()
 
@@ -133,13 +132,13 @@ async def send_message(sid, data):
         )
         await new_msg.insert()
 
-        # Update User Participation for Matching
+        # Update user's participated swarms for discovery algorithm
         user = await User.get(sender_id)
         if user and swarm_id not in user.participated_swarms:
             user.participated_swarms.append(swarm_id)
             await user.save()
 
-        # --- RECALIBRATED PHEROMONE LOGIC ---
+        # PHEROMONE LOGIC 
         swarm = await Swarm.get(swarm_id)
         if swarm:
             curr_p = getattr(swarm, 'pheromone_base', 10.0) or 10.0
@@ -169,10 +168,10 @@ async def send_message(sid, data):
 
         payload = new_msg.to_dict() if hasattr(new_msg, 'to_dict') else json.loads(new_msg.json())
         await sio.emit("receive_message", payload, room=swarm_id)
-        print(f"💬 Swarm intensity updated: {swarm.pheromone_base if swarm else 'N/A'}")
+        print(f"Swarm intensity updated: {swarm.pheromone_base if swarm else 'N/A'}")
 
     except Exception as e:
-        print(f"❌ SWARM MESSAGE ERROR: {e}")
+        print(f" SWARM MESSAGE ERROR: {e}")
 
 @sio.event
 async def send_private_message(sid, data):
@@ -258,4 +257,3 @@ async def disconnect(sid):
         await sio.emit("swarm_presence_update", {"swarm_id": swarm_id, "active_bees": active_count}, room=swarm_id)
     print(f" Bee disconnected: {sid}")
 
-# RUN COMMAND: uvicorn main:socket_app --reload --port 8000
