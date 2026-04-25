@@ -114,7 +114,10 @@ async def join_swarm(sid, data):
 
 @sio.event
 async def send_message(sid, data):
-    """Swarm Messaging Handler with Stigmergic Algorithm."""
+    """
+    Unified Swarm Messaging Handler with RECALIBRATED Stigmergic Algorithm.
+    Target: 10 messages = Midpoint (~50-60), 20 messages = Frenzy (80+)
+    """
     swarm_id = str(data.get("swarm_id")).strip()
     text = data.get("text")
     sender_id = str(data.get("sender_id") or data.get("senderId")).strip()
@@ -130,31 +133,46 @@ async def send_message(sid, data):
         )
         await new_msg.insert()
 
-        # Update user participation for algo
+        # Update User Participation for Matching
         user = await User.get(sender_id)
         if user and swarm_id not in user.participated_swarms:
             user.participated_swarms.append(swarm_id)
             await user.save()
 
-        # run phereomone boost algorithm
+        # --- RECALIBRATED PHEROMONE LOGIC ---
         swarm = await Swarm.get(swarm_id)
         if swarm:
             curr_p = getattr(swarm, 'pheromone_base', 10.0) or 10.0
-            recent_count = await Message.find(Message.swarm_id == swarm_id, Message.timestamp > datetime.utcnow() - timedelta(minutes=5)).count()
+            
+            # Count messages in the last 5 minutes to determine social pressure
+            recent_count = await Message.find(
+                Message.swarm_id == swarm_id, 
+                Message.timestamp > datetime.utcnow() - timedelta(minutes=5)
+            ).count()
+            
+            # 1. Base Boost: Lowered to 3.5 (Prevents 2-message jumps)
+            base_boost = 3.5
+            
+            # 2. Reinforcement Multiplier: Scales slower. 
+            # It only reaches 2.0x boost when 20+ messages are sent.
             r_multiplier = 1.0 + (min(recent_count, 20) / 20.0)
-            actual_boost = (2.5 * r_multiplier) * (1 - (curr_p / 100.0))
+            
+            # 3. Asymptotic Braking: The closer to 100, the harder it is to climb
+            saturation_factor = (1 - (curr_p / 100.0))
+            
+            actual_boost = (base_boost * r_multiplier) * saturation_factor
+            
             await swarm.update({"$set": {
                 "pheromone_base": min(100.0, curr_p + actual_boost),
                 "last_buzz_at": datetime.utcnow()
             }})
 
-        
         payload = new_msg.to_dict() if hasattr(new_msg, 'to_dict') else json.loads(new_msg.json())
         await sio.emit("receive_message", payload, room=swarm_id)
-        print(f"Swarm buzz from {sender_name} synced in {swarm_id}")
+        print(f"💬 Swarm intensity updated: {swarm.pheromone_base if swarm else 'N/A'}")
 
     except Exception as e:
-        print(f"SWARM MESSAGE ERROR: {e}")
+        print(f"❌ SWARM MESSAGE ERROR: {e}")
 
 @sio.event
 async def send_private_message(sid, data):
