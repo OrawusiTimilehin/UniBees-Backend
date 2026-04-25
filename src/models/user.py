@@ -4,15 +4,13 @@ from typing import List, Optional
 from pydantic import EmailStr, Field
 from passlib.context import CryptContext
 
-# THE UPGRADE: Switching to Argon2
-# Argon2 handles passwords of any length and is more secure than Bcrypt.
-# We keep bcrypt in 'schemes' so old passwords still work if you had any.
+
 pwd_context = CryptContext(schemes=["argon2", "bcrypt"], deprecated="auto")
 
 class User(Document):
     """
     User Model
-    Defines the identity and "Pollen" (interests) of each bee in the hive.
+    Defines the identity  of each bee in the hive.
     """
     username: Indexed(str, unique=True)
     email: Indexed(EmailStr, unique=True)

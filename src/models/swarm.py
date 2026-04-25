@@ -6,14 +6,13 @@ from pydantic import Field
 class Swarm(Document):
     """
     Swarm Model
-    Replaced single pollen_type with a list of tags for better categorization.
     """
     name: Indexed(str, unique=True)
     description: str
     tags: List[str] = [] 
     creator_id: str
     members: List[str] = []
-    nectar_quality: float = 0.0 # Activity/Reputation score
+    nectar_quality: float = 0.0 
     image: str = "https://images.unsplash.com/photo-1517048676732-d65bc937f952?w=400"
     created_at: datetime = Field(default_factory=datetime.utcnow)
     pheromone_base: float = Field(default=10.0)
