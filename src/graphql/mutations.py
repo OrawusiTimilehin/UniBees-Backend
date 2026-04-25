@@ -48,27 +48,26 @@ class Mutation:
         major: str
     ) -> str:
         """
-        NEW SIGNUP FLOW:
         1. Validates University Email Domain (.ac.uk or .edu).
         2. Cleans up any existing unverified attempts.
         3. Generates and sends a real OTP email.
         """
-        # 1. Gate: University Domain Restriction
+        # University Domain Restriction
         email_clean = email.lower().strip()
         allowed = [".ac.uk", ".edu"]
         if not any(email_clean.endswith(d) for d in allowed):
             raise Exception("Access Denied: Only University emails (.ac.uk or .edu) are allowed in the Hive.")
 
-        # 2. Check for duplicates
+        # Check for duplicates
         existing = await User.find_one(User.email == email_clean)
         if existing and existing.is_verified:
             raise Exception("This bee is already registered.")
         
-        # 3. Clean slate for unverified attempts
+        #  Clean slate for unverified attempts
         if existing:
             await existing.delete()
 
-        # 4. Generate OTP & Create User
+        # Generate OTP & Create User
         otp = f"{random.randint(100000, 999999)}"
         expiry = datetime.utcnow() + timedelta(minutes=10)
 
@@ -85,7 +84,7 @@ class Mutation:
         await user.set_password(password)
         await user.insert()
 
-        # 5. TRIGGER REAL EMAIL
+        # TRIGGER REAL EMAIL
         success = await send_otp_email(email_clean, otp)
         if not success:
             raise Exception("The Hive failed to send your verification email. Please check your address.")
@@ -128,7 +127,7 @@ class Mutation:
             
         return AuthPayload(token=create_token(str(user.id)), user=user)
 
-    # --- PROFILE UPDATES ---
+    # PROFILE UPDATES 
 
     @strawberry.mutation
     async def update_interests(self, info: strawberry.Info, interests: List[str]) -> UserType:
@@ -189,7 +188,7 @@ class Mutation:
         return user
     
 
-    # --- SWARM OPERATIONS ---
+    # SWARM OPERATIONS 
 
     @strawberry.mutation
     async def create_swarm(
@@ -200,7 +199,7 @@ class Mutation:
         tags: List[str],
         nectar_quality: float = 0.0,
     ) -> SwarmType:
-        """Establishes a new Swarm (Group) in the hive."""
+        """Establishes a new Swarm  in the hive."""
         user_id = info.context.get("user_id")
         if not user_id:
             raise Exception("Login required to create a swarm.")
@@ -304,7 +303,7 @@ class Mutation:
                     sender.friends.append(str(me.id))
                     await sender.save()
                 
-                print(f"✅ {me.name} and {sender.name} are now friends!")
+                print(f"{me.name} and {sender.name} are now friends!")
 
         await notif.delete()
         return True
