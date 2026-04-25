@@ -164,3 +164,30 @@ class Query:
         return sorted(all_swarms, key=lambda x: x.nectar_quality, reverse=True)
 
 
+    
+    @strawberry.field
+    async def discover_bees(self, info: strawberry.Info) -> List[UserType]:
+        """
+        THE DISCOVERY ENGINE:
+        Finds all bees in the hive regardless of online status or swipe history.
+        This ensures the BeesMatch page always has profiles to show, even if 
+        you have already swiped on them in a previous session.
+        """
+        user_id = info.context.get("user_id")
+        if not user_id:
+            raise Exception("Not authenticated")
+
+        me = await User.get(user_id)
+        if not me:
+            raise Exception("Bee record not found")
+
+        # SCRAPPED: Filtering by 'seen_bee_ids' and 'is_online' status.
+        # We now query for every user document where the ID is NOT equal to the current user's ID.
+        available_bees = await User.find(
+            User.id != me.id
+        ).to_list()
+
+        # DEBUG LOGS: Check your terminal to see the count of bees found.
+        print(f"🐝 Discovery Sync: Found {len(available_bees)} other bees for {me.name} to match with.")
+
+        return available_bees

@@ -15,6 +15,8 @@ class UserType:
     friends: List[str]
     swarms_joined: List[str]
     image: str
+    participated_swarms: List[str]
+    swipes_today: int
 
 @strawberry.type
 class NotificationType:
