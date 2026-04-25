@@ -31,6 +31,9 @@ class User(Document):
     last_swipe_reset: datetime= Field(default_factory=datetime.utcnow)
     seen_bee_ids: List[str] = []
     liked_bee_ids: List[str] = [] 
+    is_verified: bool = False
+    otp_code: Optional[str] = None
+    otp_expiry: Optional[datetime] = None
 
     class Settings:
         name = "users" 
