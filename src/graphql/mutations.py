@@ -2,16 +2,15 @@ from dotenv import load_dotenv
 import strawberry
 import jwt
 import os
+import random
 from datetime import datetime, timedelta
 from typing import List, Optional
 from src.middleware.auth import get_user_id_from_request
 from src.models.user import User
-from src.graphql.types import UserType, AuthPayload
+from src.graphql.types import UserType, AuthPayload, SwarmType, NotificationType
 from src.models.swarm import Swarm
-from src.graphql.types import UserType, AuthPayload, SwarmType
 from src.models.notification import Notification
-from src.graphql.types import NotificationType  
-
+from src.utils.email import send_otp_email
 
 # Load environment variables from .env file
 load_dotenv()
@@ -40,24 +39,96 @@ def create_token(user_id: str) -> str:
 class Mutation:
     # SIGNUP & LOGIN 
     @strawberry.mutation
-    async def signup(self, username: str, email: str, password: str, name: str) -> AuthPayload:
-        email_clean = email.lower()
+    async def signup(
+        self, 
+        username: str, 
+        email: str, 
+        password: str, 
+        name: str, 
+        major: str
+    ) -> str:
+        """
+        NEW SIGNUP FLOW:
+        1. Validates University Email Domain (.ac.uk or .edu).
+        2. Cleans up any existing unverified attempts.
+        3. Generates and sends a real OTP email.
+        """
+        # 1. Gate: University Domain Restriction
+        email_clean = email.lower().strip()
+        allowed = [".ac.uk", ".edu"]
+        if not any(email_clean.endswith(d) for d in allowed):
+            raise Exception("Access Denied: Only University emails (.ac.uk or .edu) are allowed in the Hive.")
+
+        # 2. Check for duplicates
         existing = await User.find_one(User.email == email_clean)
+        if existing and existing.is_verified:
+            raise Exception("This bee is already registered.")
+        
+        # 3. Clean slate for unverified attempts
         if existing:
-            raise Exception("Bee already exists in the hive!")
-        new_user = User(username=username, email=email_clean, password="", name=name)
-        await new_user.set_password(password)
-        await new_user.insert()
-        return AuthPayload(token=create_token(str(new_user.id)), user=new_user)
+            await existing.delete()
+
+        # 4. Generate OTP & Create User
+        otp = f"{random.randint(100000, 999999)}"
+        expiry = datetime.utcnow() + timedelta(minutes=10)
+
+        user = User(
+            username=username,
+            email=email_clean,
+            password="", # Set via hasher
+            name=name,
+            major=major,
+            is_verified=False,
+            otp_code=otp,
+            otp_expiry=expiry
+        )
+        await user.set_password(password)
+        await user.insert()
+
+        # 5. TRIGGER REAL EMAIL
+        success = await send_otp_email(email_clean, otp)
+        if not success:
+            raise Exception("The Hive failed to send your verification email. Please check your address.")
+        
+        return "OTP_SENT"
+
+    @strawberry.mutation
+    async def verify_otp(self, email: str, code: str) -> AuthPayload:
+        """
+        Verifies the OTP code and activates the account.
+        """
+        user = await User.find_one(User.email == email.lower())
+        if not user or user.otp_code != code:
+            raise Exception("Invalid or incorrect code.")
+            
+        if datetime.utcnow() > user.otp_expiry:
+            raise Exception("Code expired. Please sign up again.")
+
+        # Activate account
+        user.is_verified = True
+        user.otp_code = None 
+        await user.save()
+
+        # Generate the JWT using your established token creator
+        token = create_token(str(user.id))
+        return AuthPayload(token=token, user=user)
 
     @strawberry.mutation
     async def login(self, email: str, password: str) -> AuthPayload:
         user = await User.find_one(User.email == email.lower())
-        if not user or not user.verify_password(password):
+        if not user:
             raise Exception("Invalid credentials")
+            
+        # Ensure only verified users can log in
+        if not getattr(user, "is_verified", False):
+            raise Exception("Please verify your account via email before logging in.")
+            
+        if not user.verify_password(password):
+            raise Exception("Invalid credentials")
+            
         return AuthPayload(token=create_token(str(user.id)), user=user)
 
-    # PROFILE UPDATES
+    # --- PROFILE UPDATES ---
 
     @strawberry.mutation
     async def update_interests(self, info: strawberry.Info, interests: List[str]) -> UserType:
@@ -118,7 +189,7 @@ class Mutation:
         return user
     
 
- # SWARM OPERATIONS 
+    # --- SWARM OPERATIONS ---
 
     @strawberry.mutation
     async def create_swarm(
@@ -138,29 +209,12 @@ class Mutation:
             name=name,
             description=description,
             creator_id=user_id,
-            members=[user_id]
+            members=[user_id],
+            tags=tags,
+            nectar_quality=nectar_quality
         )
         await new_swarm.insert()
         return new_swarm
-
-    @strawberry.mutation
-    async def join_swarm(self, info: strawberry.Info, swarm_id: str) -> SwarmType:
-        """Adds the logged-in bee to an existing swarm."""
-        user_id = info.context.get("user_id")
-        if not user_id:
-            raise Exception("Unauthorized.")
-
-        swarm = await Swarm.get(swarm_id)
-        if not swarm:
-            raise Exception("Swarm not found.")
-
-        if user_id not in swarm.members:
-            swarm.members.append(user_id)
-            await swarm.save()
-            
-        return swarm
-    
-
 
     @strawberry.mutation
     async def update_swarm(
@@ -210,6 +264,9 @@ class Mutation:
             await swarm.save()
             
         #  Update User's Joined Swarms
+        if not hasattr(user, 'swarms_joined') or user.swarms_joined is None:
+            user.swarms_joined = []
+            
         if swarm_id not in user.swarms_joined:
             user.swarms_joined.append(swarm_id)
             await user.save()
@@ -223,16 +280,10 @@ class Mutation:
         notification_id: str, 
         action: str
     ) -> bool:
-        # Access context as a dictionary if dot notation fails
-        try:
-            request = info.context.request
-        except AttributeError:
-            request = info.context["request"]
+        user_id = info.context.get("user_id")
+        if not user_id: return False
 
-        my_id = get_user_id_from_request(request)
-        if not my_id: return False
-
-        # GHOST ID CHECK (Prevents the PydanticObjectId crash)
+        # GHOST ID CHECK (Prevents crash for UI temp IDs)
         if notification_id.startswith("temp-"):
             return True
 
@@ -241,14 +292,10 @@ class Mutation:
         if not notif: return False
 
         if action == "ACCEPT":
-            me = await User.get(my_id)
+            me = await User.get(user_id)
             sender = await User.get(notif.from_user_id)
 
             if me and sender:
-                # Ensure friends list exists and update
-                if not hasattr(me, 'friends') or me.friends is None: me.friends = []
-                if not hasattr(sender, 'friends') or sender.friends is None: sender.friends = []
-
                 if str(sender.id) not in me.friends:
                     me.friends.append(str(sender.id))
                     await me.save()
@@ -268,4 +315,3 @@ class Mutation:
         if notif:
             await notif.delete()
         return True
-    
